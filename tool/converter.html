@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TOEIC 單字網站產生器</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #161b27;
+    --border: #252d40;
+    --accent: #4f8ef7;
+    --accent2: #e8a44a;
+    --green: #3ecf8e;
+    --red: #f05c5c;
+    --text: #dde3f0;
+    --muted: #6b778f;
+    --dim: #3a4258;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans TC', sans-serif;
+    min-height: 100vh;
+    padding: 40px 24px 80px;
+  }
+
+  .container { max-width: 860px; margin: 0 auto; }
+
+  /* Header */
+  .header { text-align: center; margin-bottom: 40px; }
+  .header-badge {
+    display: inline-block;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 4px 12px;
+    border-radius: 2px;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+  .header p { color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+  /* Steps */
+  .steps {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .step-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 24px;
+  }
+
+  .step-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+  }
+
+  .step-label {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+
+  .step-desc {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 16px;
+    line-height: 1.6;
+  }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed var(--dim);
+    border-radius: 5px;
+    padding: 20px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(79,142,247,0.05);
+  }
+  .upload-zone.done {
+    border-color: var(--green);
+    border-style: solid;
+    background: rgba(62,207,142,0.05);
+  }
+  .upload-zone input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+  .upload-icon { font-size: 24px; margin-bottom: 8px; }
+  .upload-text { font-size: 13px; color: var(--muted); }
+  .upload-text strong { color: var(--accent); }
+  .upload-filename {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--green);
+    margin-top: 6px;
+    display: none;
+  }
+  .upload-zone.done .upload-filename { display: block; }
+  .upload-zone.done .upload-text { color: var(--green); }
+
+  /* Parse button */
+  .parse-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 24px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .parse-info { font-size: 13px; color: var(--muted); }
+  .parse-info strong { color: var(--text); }
+
+  .btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 10px 20px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: #3d7ef5; }
+  .btn-primary:disabled { background: var(--dim); cursor: not-allowed; opacity: 0.6; }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+  .btn-ghost:hover { background: rgba(79,142,247,0.1); }
+
+  .btn-green {
+    background: var(--green);
+    color: #0f1117;
+  }
+  .btn-green:hover { background: #32c47f; }
+
+  .btn-orange {
+    background: var(--accent2);
+    color: #0f1117;
+  }
+  .btn-orange:hover { background: #e09030; }
+
+  /* Status */
+  .status {
+    padding: 12px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .status.error { background: rgba(240,92,92,0.12); border: 1px solid rgba(240,92,92,0.3); color: #f08080; display: block; }
+  .status.success { background: rgba(62,207,142,0.1); border: 1px solid rgba(62,207,142,0.3); color: var(--green); display: block; }
+  .status.info { background: rgba(79,142,247,0.1); border: 1px solid rgba(79,142,247,0.3); color: var(--accent); display: block; }
+
+  /* Preview */
+  .preview-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 24px;
+    display: none;
+  }
+  .preview-header {
+    background: #1a2035;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .preview-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+  }
+  .lesson-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 16px 20px 8px;
+  }
+  .lesson-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 2px;
+    background: rgba(79,142,247,0.1);
+    border: 1px solid rgba(79,142,247,0.2);
+    color: var(--accent);
+  }
+
+  .preview-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border-top: 1px solid var(--border);
+  }
+  .stat-item {
+    padding: 16px 20px;
+    border-right: 1px solid var(--border);
+    text-align: center;
+  }
+  .stat-item:last-child { border-right: none; }
+  .stat-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 4px;
+  }
+  .stat-label { font-size: 11px; color: var(--muted); }
+
+  /* Output section */
+  .output-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    display: none;
+  }
+
+  .output-header {
+    background: #1a2035;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .output-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+  }
+
+  .output-actions { display: flex; gap: 8px; }
+
+  .code-area {
+    background: #0b0e14;
+    padding: 16px 20px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: #7ab4ff;
+    line-height: 1.7;
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .code-footer {
+    padding: 10px 20px;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .copy-success {
+    color: var(--green);
+    font-size: 12px;
+    display: none;
+  }
+
+  /* Guide */
+  .guide-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 24px;
+    display: none;
+  }
+
+  .guide-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent2);
+    letter-spacing: 0.1em;
+    margin-bottom: 16px;
+  }
+
+  .guide-steps { counter-reset: guide; }
+  .guide-step {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 14px;
+    align-items: flex-start;
+  }
+  .guide-step-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent2);
+    background: rgba(232,164,74,0.1);
+    border: 1px solid rgba(232,164,74,0.2);
+    border-radius: 2px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .guide-step-text {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .guide-step-text code {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    background: rgba(79,142,247,0.1);
+    color: var(--accent);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 32px 0;
+  }
+
+  @media (max-width: 600px) {
+    .steps { grid-template-columns: 1fr; }
+    .preview-stats { grid-template-columns: 1fr 1fr; }
+    body { padding: 24px 16px 60px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-badge">TOEIC 600 工具箱</div>
+    <h1>單字網站產生器</h1>
+    <p>上傳兩個 xlsx 檔，自動解析並輸出可用的 JS 資料或完整新版 HTML 網站</p>
+  </div>
+
+  <!-- Upload steps -->
+  <div class="steps">
+    <div class="step-card">
+      <div class="step-num">STEP 01</div>
+      <div class="step-label">📘 核心單字完整對照總表</div>
+      <div class="step-desc">欄位：Lesson、Vocabulary、Chinese Definition、Example Sentence</div>
+      <div class="upload-zone" id="zone-core">
+        <input type="file" id="file-core" accept=".xlsx,.xls" />
+        <div class="upload-icon">📂</div>
+        <div class="upload-text"><strong>點擊</strong>或拖曳上傳 xlsx</div>
+        <div class="upload-filename" id="name-core"></div>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="step-num">STEP 02</div>
+      <div class="step-label">📗 衍生詞家族變化總表</div>
+      <div class="step-desc">欄位：Lesson、Core Word、Verb、Noun、Adjective、Adverb、Example Sentence</div>
+      <div class="upload-zone" id="zone-family">
+        <input type="file" id="file-family" accept=".xlsx,.xls" />
+        <div class="upload-icon">📂</div>
+        <div class="upload-text"><strong>點擊</strong>或拖曳上傳 xlsx</div>
+        <div class="upload-filename" id="name-family"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Parse -->
+  <div class="parse-section">
+    <div class="parse-info">
+      上傳兩個檔案後，點擊「<strong>解析資料</strong>」開始處理
+    </div>
+    <button class="btn btn-primary" id="btn-parse" disabled>⚙ 解析資料</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <!-- Preview -->
+  <div class="preview-card" id="preview-card">
+    <div class="preview-header">
+      <span class="preview-title">✅ 解析結果預覽</span>
+    </div>
+    <div class="lesson-badges" id="lesson-badges"></div>
+    <div class="preview-stats">
+      <div class="stat-item">
+        <span class="stat-num" id="stat-lessons">0</span>
+        <span class="stat-label">Lesson 數量</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-num" id="stat-core">0</span>
+        <span class="stat-label">核心單字筆數</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-num" id="stat-family">0</span>
+        <span class="stat-label">衍生詞筆數</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- JS Output -->
+  <div class="output-section" id="output-js">
+    <div class="output-header">
+      <span class="output-title" style="color:var(--accent)">📋 JS 資料物件（貼入現有網站）</span>
+      <div class="output-actions">
+        <button class="btn btn-ghost" id="btn-copy">複製</button>
+      </div>
+    </div>
+    <div class="code-area" id="code-preview"></div>
+    <div class="code-footer">
+      <span>將上方內容複製，替換網站中 <code>const DATA = {...};</code> 的部分</span>
+      <span class="copy-success" id="copy-success">✓ 已複製！</span>
+    </div>
+  </div>
+
+  <!-- HTML Download -->
+  <div class="output-section" id="output-html">
+    <div class="output-header">
+      <span class="output-title" style="color:var(--green)">🌐 下載完整 HTML 網站</span>
+      <div class="output-actions">
+        <button class="btn btn-green" id="btn-download">⬇ 下載 HTML</button>
+      </div>
+    </div>
+    <div class="code-footer" style="padding:16px 20px">
+      產生包含所有單字資料的完整獨立網站檔案，可直接用瀏覽器開啟
+    </div>
+  </div>
+
+  <!-- Usage guide -->
+  <div class="guide-card" id="guide-card">
+    <div class="guide-title">📖 使用說明：如何更新現有網站？</div>
+    <div class="guide-steps">
+      <div class="guide-step">
+        <div class="guide-step-num">1</div>
+        <div class="guide-step-text">用文字編輯器（記事本、VS Code 等）開啟你的 <code>toeic600.html</code> 網站檔案</div>
+      </div>
+      <div class="guide-step">
+        <div class="guide-step-num">2</div>
+        <div class="guide-step-text">找到 <code>const DATA = {</code> 這一行，選取從這行到最後的 <code>};</code>（包含兩端）</div>
+      </div>
+      <div class="guide-step">
+        <div class="guide-step-num">3</div>
+        <div class="guide-step-text">將選取內容刪除，貼上從本工具複製的 JS 物件</div>
+      </div>
+      <div class="guide-step">
+        <div class="guide-step-num">4</div>
+        <div class="guide-step-text">儲存後重新整理瀏覽器，新 Lesson 就會出現了 🎉</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── State ──
+let coreFile = null;
+let familyFile = null;
+let parsedData = null;
+let fullDataStr = '';
+
+// ── File upload handlers ──
+function setupUploadZone(inputId, zoneId, nameId, stateKey) {
+  const input = document.getElementById(inputId);
+  const zone  = document.getElementById(zoneId);
+  const nameEl = document.getElementById(nameId);
+
+  input.addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    window[stateKey] = f;
+    nameEl.textContent = f.name;
+    zone.classList.add('done');
+    zone.querySelector('.upload-icon').textContent = '✅';
+    checkReady();
+  });
+
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (!f || !f.name.match(/\.xlsx?$/i)) return;
+    window[stateKey] = f;
+    nameEl.textContent = f.name;
+    zone.classList.add('done');
+    zone.querySelector('.upload-icon').textContent = '✅';
+    checkReady();
+  });
+}
+
+setupUploadZone('file-core',   'zone-core',   'name-core',   'coreFile');
+setupUploadZone('file-family', 'zone-family', 'name-family', 'familyFile');
+
+function checkReady() {
+  document.getElementById('btn-parse').disabled = !(window.coreFile && window.familyFile);
+}
+
+// ── Parse ──
+document.getElementById('btn-parse').addEventListener('click', parseFiles);
+
+function parseFiles() {
+  setStatus('info', '⏳ 正在解析...');
+  const btn = document.getElementById('btn-parse');
+  btn.disabled = true;
+
+  Promise.all([
+    readXlsx(window.coreFile),
+    readXlsx(window.familyFile)
+  ]).then(([coreRows, familyRows]) => {
+    try {
+      parsedData = buildData(coreRows, familyRows);
+      renderPreview(parsedData);
+      setStatus('success', `✅ 解析成功！共 ${Object.keys(parsedData).length} 個 Lesson`);
+      showOutputs();
+    } catch(e) {
+      setStatus('error', '❌ 解析失敗：' + e.message);
+    }
+    btn.disabled = false;
+  }).catch(e => {
+    setStatus('error', '❌ 讀取檔案失敗：' + e.message);
+    btn.disabled = false;
+  });
+}
+
+function readXlsx(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        resolve(rows);
+      } catch(err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error('FileReader error'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function buildData(coreRows, familyRows) {
+  const data = {};
+
+  // Core rows
+  for (const row of coreRows) {
+    const lesson = String(row['Lesson'] || '').trim();
+    if (!lesson) continue;
+    if (!data[lesson]) data[lesson] = { core: [], family: [] };
+
+    const vocab  = String(row['Vocabulary'] || '').trim();
+    const zh     = String(row['Chinese Definition'] || '').trim();
+    const ex     = String(row['Example Sentence'] || '').trim();
+    if (!vocab) continue;
+
+    data[lesson].core.push({ Vocabulary: vocab, 'Chinese Definition': zh, 'Example Sentence': ex });
+  }
+
+  // Family rows
+  for (const row of familyRows) {
+    const lessonNum = String(row['Lesson'] || '').trim();
+    const lessonKey = `Lesson ${lessonNum}`;
+
+    // Also check "Lesson X" format directly
+    const key = data[lessonKey] ? lessonKey : (data[`Lesson ${lessonNum}`] ? `Lesson ${lessonNum}` : null);
+    const target = key || lessonKey;
+
+    if (!data[target]) data[target] = { core: [], family: [] };
+
+    // Find the core word column (flexible column name matching)
+    const coreWord = String(
+      row['Core Word (EN/ZH)'] || row['Core Word'] || row['CoreWord'] || ''
+    ).trim();
+    const verb = String(row['Verb (動詞)'] || row['Verb'] || '').trim();
+    const noun = String(row['Noun (名詞)'] || row['Noun'] || '').trim();
+    const adj  = String(row['Adjective (形容詞)'] || row['Adjective'] || '').trim();
+    const adv  = String(row['Adverb (副詞)'] || row['Adverb'] || '').trim();
+    const ex   = String(row['Example Sentence'] || '').trim();
+
+    if (!coreWord) continue;
+
+    data[target].family.push({
+      'Core Word (EN/ZH)': coreWord,
+      'Verb (動詞)': verb,
+      'Noun (名詞)': noun,
+      'Adjective (形容詞)': adj,
+      'Adverb (副詞)': adv,
+      'Example Sentence': ex
+    });
+  }
+
+  if (Object.keys(data).length === 0) throw new Error('無法解析資料，請確認欄位名稱正確');
+  return data;
+}
+
+function renderPreview(data) {
+  const keys = Object.keys(data).sort((a, b) => {
+    const na = parseInt(a.replace(/\D/g,''));
+    const nb = parseInt(b.replace(/\D/g,''));
+    return na - nb;
+  });
+
+  // Lesson badges
+  const badgesEl = document.getElementById('lesson-badges');
+  badgesEl.innerHTML = keys.map(k => `<span class="lesson-badge">${k}</span>`).join('');
+
+  // Stats
+  let totalCore = 0, totalFamily = 0;
+  keys.forEach(k => {
+    totalCore   += data[k].core.length;
+    totalFamily += data[k].family.length;
+  });
+  document.getElementById('stat-lessons').textContent = keys.length;
+  document.getElementById('stat-core').textContent    = totalCore;
+  document.getElementById('stat-family').textContent  = totalFamily;
+
+  document.getElementById('preview-card').style.display = 'block';
+}
+
+function showOutputs() {
+  // Build JS string
+  fullDataStr = 'const DATA = ' + JSON.stringify(parsedData, null, 2) + ';';
+
+  // Preview (truncated)
+  const preview = fullDataStr.length > 800
+    ? fullDataStr.slice(0, 800) + '\n\n... (共 ' + fullDataStr.length.toLocaleString() + ' 字元)'
+    : fullDataStr;
+  document.getElementById('code-preview').textContent = preview;
+
+  document.getElementById('output-js').style.display   = 'block';
+  document.getElementById('output-html').style.display = 'block';
+  document.getElementById('guide-card').style.display  = 'block';
+}
+
+// ── Copy ──
+document.getElementById('btn-copy').addEventListener('click', () => {
+  navigator.clipboard.writeText(fullDataStr).then(() => {
+    const el = document.getElementById('copy-success');
+    el.style.display = 'inline';
+    setTimeout(() => el.style.display = 'none', 2500);
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = fullDataStr;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    const el = document.getElementById('copy-success');
+    el.style.display = 'inline';
+    setTimeout(() => el.style.display = 'none', 2500);
+  });
+});
+
+// ── Download full HTML ──
+document.getElementById('btn-download').addEventListener('click', () => {
+  const html = buildFullHTML(parsedData);
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'toeic600.html';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ── Status ──
+function setStatus(type, msg) {
+  const el = document.getElementById('status');
+  el.className = 'status ' + type;
+  el.textContent = msg;
+}
+
+// ── Build Full HTML ──
+function buildFullHTML(data) {
+  const dataJson = JSON.stringify(data);
+  return `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TOEIC 600 核心單字學習系統</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=Space+Mono:wght@400;700&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0d0f14;--surface:#13161e;--surface2:#1a1e2a;--border:#252b3a;
+    --accent:#4f8ef7;--accent2:#e8a44a;--text:#e2e8f4;--text-muted:#7a8499;
+    --text-dim:#4a5268;--left-col:#1a2235;--right-col:#1e1a2a;
+    --left-header:#2a4070;--right-header:#2d1f4a;
+    --tag-verb:#1e3a5f;--tag-noun:#1a3a2a;--tag-adj:#3a2a10;--tag-adv:#2a1a3a;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'Noto Serif TC',serif;min-height:100vh}
+  #site-header{background:linear-gradient(135deg,#0d1525 0%,#0d0f14 60%,#150d25 100%);border-bottom:1px solid var(--border);padding:28px 40px 20px;position:sticky;top:0;z-index:100;box-shadow:0 4px 30px rgba(0,0,0,.5)}
+  .header-top{display:flex;align-items:baseline;gap:16px;margin-bottom:18px}
+  .site-title{font-family:'Space Mono',monospace;font-size:15px;font-weight:700;color:var(--accent);letter-spacing:.12em;text-transform:uppercase}
+  .site-sub{font-family:'Crimson Pro',serif;font-size:20px;font-style:italic;color:var(--text-muted)}
+  .lesson-nav{display:flex;flex-wrap:wrap;gap:6px}
+  .lesson-btn{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:3px;color:var(--text-muted);cursor:pointer;transition:all .15s;letter-spacing:.06em}
+  .lesson-btn:hover{background:var(--left-col);border-color:var(--accent);color:var(--accent)}
+  .lesson-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  #main{padding:0 40px 60px}
+  .lesson-section{display:none}
+  .lesson-section.active{display:block}
+  .lesson-heading{padding:32px 0 20px;display:flex;align-items:center;gap:20px;border-bottom:1px solid var(--border)}
+  .lesson-num{font-family:'Space Mono',monospace;font-size:48px;font-weight:700;color:var(--text-dim);line-height:1}
+  .lesson-label{font-family:'Crimson Pro',serif;font-size:22px;font-style:italic;color:var(--text-muted)}
+  .split-layout{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--border);border-top:none}
+  .col-header{padding:14px 24px;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+  .col-left .col-header{background:var(--left-header);color:#7ab4ff;border-right:1px solid var(--border)}
+  .col-right .col-header{background:var(--right-header);color:#c49bff}
+  .col-dot{width:8px;height:8px;border-radius:50%;background:currentColor;opacity:.6}
+  .col-left{background:var(--left-col);border-right:1px solid var(--border)}
+  .col-right{background:var(--right-col)}
+  .word-card{padding:18px 24px;border-bottom:1px solid rgba(255,255,255,.05);transition:background .1s}
+  .word-card:hover{background:rgba(79,142,247,.06)}
+  .word-card:last-child{border-bottom:none}
+  .word-row{display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+  .word-en{font-family:'Crimson Pro',serif;font-size:22px;font-weight:600;color:#a8d4ff;letter-spacing:.01em}
+  .word-zh{font-size:13px;color:var(--text-muted);padding:2px 8px;background:rgba(79,142,247,.1);border-radius:2px;border:1px solid rgba(79,142,247,.15)}
+  .audio-btn{margin-left:auto;display:flex;align-items:center;gap:4px;background:none;border:1px solid rgba(79,142,247,.2);border-radius:3px;color:var(--text-dim);padding:4px 8px;cursor:pointer;font-size:13px;font-family:'Space Mono',monospace;transition:all .15s;white-space:nowrap;flex-shrink:0}
+  .audio-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(79,142,247,.08)}
+  .audio-btn.playing{border-color:var(--accent2);color:var(--accent2);background:rgba(232,164,74,.1)}
+  .audio-btn svg{width:12px;height:12px;fill:currentColor}
+  .example-row{display:flex;align-items:flex-start;gap:10px}
+  .example-text{font-family:'Crimson Pro',serif;font-size:15px;font-style:italic;color:var(--text-muted);line-height:1.6;flex:1}
+  .ex-audio-btn{flex-shrink:0;display:flex;align-items:center;gap:4px;background:none;border:1px solid rgba(255,255,255,.06);border-radius:3px;color:var(--text-dim);padding:3px 7px;cursor:pointer;font-size:11px;font-family:'Space Mono',monospace;transition:all .15s;white-space:nowrap}
+  .ex-audio-btn:hover{border-color:rgba(255,255,255,.2);color:var(--text-muted)}
+  .ex-audio-btn.playing{border-color:var(--accent2);color:var(--accent2)}
+  .ex-audio-btn svg{width:10px;height:10px;fill:currentColor}
+  .family-card{padding:18px 24px;border-bottom:1px solid rgba(255,255,255,.05);transition:background .1s}
+  .family-card:hover{background:rgba(196,155,255,.05)}
+  .family-card:last-child{border-bottom:none}
+  .family-core-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  .family-core-word{font-family:'Crimson Pro',serif;font-size:20px;font-weight:600;color:#d4b0ff}
+  .family-forms{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .form-tag{font-family:'Space Mono',monospace;font-size:10px;padding:3px 8px;border-radius:2px;display:flex;align-items:center;gap:5px;border:1px solid rgba(255,255,255,.05)}
+  .form-tag-label{font-size:9px;letter-spacing:.08em}
+  .form-tag-word{font-size:11px;color:var(--text)}
+  .tag-v{background:var(--tag-verb);border-color:rgba(74,142,247,.15)}.tag-v .form-tag-label{color:#4a8ef7}
+  .tag-n{background:var(--tag-noun);border-color:rgba(74,200,120,.15)}.tag-n .form-tag-label{color:#4ac878}
+  .tag-a{background:var(--tag-adj);border-color:rgba(247,180,74,.15)}.tag-a .form-tag-label{color:#f7b44a}
+  .tag-adv{background:var(--tag-adv);border-color:rgba(190,74,247,.15)}.tag-adv .form-tag-label{color:#be4af7}
+  @media(max-width:900px){#site-header{padding:20px}#main{padding:0 20px 60px}.split-layout{grid-template-columns:1fr}.col-left{border-right:none;border-bottom:1px solid var(--border)}}
+</style>
+</head>
+<body>
+<header id="site-header">
+  <div class="header-top">
+    <span class="site-title">TOEIC 600</span>
+    <span class="site-sub">核心單字學習系統</span>
+  </div>
+  <nav class="lesson-nav" id="lesson-nav"></nav>
+</header>
+<main id="main"></main>
+<script>
+const DATA = ${dataJson};
+
+let currentUtterance=null,currentBtn=null;
+function speak(text,btn){
+  if(currentUtterance){window.speechSynthesis.cancel();if(currentBtn){currentBtn.classList.remove('playing');currentBtn.innerHTML=iPlay()+' 播放'}if(currentBtn===btn){currentBtn=null;currentUtterance=null;return}}
+  const u=new SpeechSynthesisUtterance(text);u.lang='en-US';u.rate=0.9;
+  u.onstart=()=>{btn.classList.add('playing');btn.innerHTML=iStop()+' 停止'};
+  u.onend=()=>{btn.classList.remove('playing');btn.innerHTML=iPlay()+' 播放';currentBtn=null;currentUtterance=null};
+  u.onerror=()=>{btn.classList.remove('playing');btn.innerHTML=iPlay()+' 播放';currentBtn=null;currentUtterance=null};
+  currentUtterance=u;currentBtn=btn;window.speechSynthesis.speak(u);
+}
+function speakEx(text,btn){
+  if(currentUtterance){window.speechSynthesis.cancel();if(currentBtn){currentBtn.classList.remove('playing');currentBtn.innerHTML=iPlaySm()}if(currentBtn===btn){currentBtn=null;currentUtterance=null;return}}
+  const u=new SpeechSynthesisUtterance(text);u.lang='en-US';u.rate=0.85;
+  u.onstart=()=>{btn.classList.add('playing');btn.innerHTML=iStopSm()};
+  u.onend=()=>{btn.classList.remove('playing');btn.innerHTML=iPlaySm();currentBtn=null;currentUtterance=null};
+  u.onerror=()=>{btn.classList.remove('playing');btn.innerHTML=iPlaySm();currentBtn=null;currentUtterance=null};
+  currentUtterance=u;currentBtn=btn;window.speechSynthesis.speak(u);
+}
+const svgPlay='<svg viewBox="0 0 16 16"><path d="M3 2l10 6-10 6z"/></svg>';
+const svgStop='<svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10"/></svg>';
+function iPlay(){return svgPlay}function iStop(){return svgStop}function iPlaySm(){return svgPlay}function iStopSm(){return svgStop}
+function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+function buildNav(){
+  const nav=document.getElementById('lesson-nav');
+  const keys=Object.keys(DATA).sort((a,b)=>parseInt(a.replace(/\\D/g,''))-parseInt(b.replace(/\\D/g,'')));
+  keys.forEach((k,i)=>{
+    const n=k.replace('Lesson ','');
+    const btn=document.createElement('button');
+    btn.className='lesson-btn'+(i===0?' active':'');
+    btn.textContent='L'+n;btn.dataset.lesson=k;
+    btn.addEventListener('click',()=>switchLesson(k,btn));
+    nav.appendChild(btn);
+  });
+}
+
+function switchLesson(key,clickedBtn){
+  document.querySelectorAll('.lesson-btn').forEach(b=>b.classList.remove('active'));
+  clickedBtn.classList.add('active');
+  document.querySelectorAll('.lesson-section').forEach(s=>s.classList.remove('active'));
+  const id='ls-'+key.replace(/ /g,'-');
+  const sec=document.getElementById(id);
+  if(sec){sec.classList.add('active');sec.scrollIntoView({behavior:'smooth',block:'start'})}
+  if(currentUtterance){window.speechSynthesis.cancel();if(currentBtn)currentBtn.classList.remove('playing');currentBtn=null;currentUtterance=null}
+}
+
+function buildLessons(){
+  const main=document.getElementById('main');
+  const keys=Object.keys(DATA).sort((a,b)=>parseInt(a.replace(/\\D/g,''))-parseInt(b.replace(/\\D/g,'')));
+  keys.forEach((key,idx)=>{
+    const lesson=DATA[key];
+    const num=key.replace('Lesson ','');
+    const secId='ls-'+key.replace(/ /g,'-');
+    const sec=document.createElement('section');
+    sec.className='lesson-section'+(idx===0?' active':'');
+    sec.id=secId;
+    sec.innerHTML=\`<div class="lesson-heading"><span class="lesson-num">\${String(num).padStart(2,'0')}</span><span class="lesson-label">\${esc(key)}</span></div>
+    <div class="split-layout">
+      <div class="col-left"><div class="col-header"><span class="col-dot"></span>核心單字完整對照</div><div id="core-\${num}"></div></div>
+      <div class="col-right"><div class="col-header"><span class="col-dot"></span>衍生詞家族變化</div><div id="family-\${num}"></div></div>
+    </div>\`;
+    main.appendChild(sec);
+
+    const coreEl=sec.querySelector('#core-'+num);
+    (lesson.core||[]).forEach(item=>{
+      const card=document.createElement('div');card.className='word-card';
+      const wid='w'+Math.random().toString(36).slice(2);
+      const eid='e'+Math.random().toString(36).slice(2);
+      card.innerHTML=\`<div class="word-row"><span class="word-en">\${esc(item.Vocabulary)}</span><span class="word-zh">\${esc(item['Chinese Definition'])}</span><button class="audio-btn" id="\${wid}">\${iPlay()} 播放</button></div>
+      <div class="example-row"><span class="example-text">\${esc(item['Example Sentence'])}</span><button class="ex-audio-btn" id="\${eid}">\${iPlaySm()}</button></div>\`;
+      coreEl.appendChild(card);
+      card.querySelector('#'+wid).addEventListener('click',function(){speak(item.Vocabulary,this)});
+      card.querySelector('#'+eid).addEventListener('click',function(){speakEx(item['Example Sentence'],this)});
+    });
+
+    const famEl=sec.querySelector('#family-'+num);
+    (lesson.family||[]).forEach(item=>{
+      const card=document.createElement('div');card.className='family-card';
+      const raw=item['Core Word (EN/ZH)']||'';
+      const pi=raw.indexOf('(');
+      const coreEn=pi>-1?raw.slice(0,pi).trim():raw;
+      const coreZh=pi>-1?raw.slice(pi):'';
+      const verb=item['Verb (動詞)'];const noun=item['Noun (名詞)'];
+      const adj=item['Adjective (形容詞)'];const adv=item['Adverb (副詞)'];
+      const ex=item['Example Sentence'];
+      const wid='fw'+Math.random().toString(36).slice(2);
+      const eid='fe'+Math.random().toString(36).slice(2);
+      let forms='';
+      if(verb)forms+=\`<span class="form-tag tag-v"><span class="form-tag-label">動</span><span class="form-tag-word">\${esc(verb)}</span></span>\`;
+      if(noun)forms+=\`<span class="form-tag tag-n"><span class="form-tag-label">名</span><span class="form-tag-word">\${esc(noun)}</span></span>\`;
+      if(adj)forms+=\`<span class="form-tag tag-a"><span class="form-tag-label">形</span><span class="form-tag-word">\${esc(adj)}</span></span>\`;
+      if(adv)forms+=\`<span class="form-tag tag-adv"><span class="form-tag-label">副</span><span class="form-tag-word">\${esc(adv)}</span></span>\`;
+      card.innerHTML=\`<div class="family-core-row"><span class="family-core-word">\${esc(coreEn)}</span><span class="word-zh" style="border-color:rgba(196,155,255,.2);background:rgba(196,155,255,.08)">\${esc(coreZh)}</span><button class="audio-btn" id="\${wid}" style="border-color:rgba(196,155,255,.2)">\${iPlay()} 播放</button></div>
+      <div class="family-forms">\${forms}</div>
+      <div class="example-row"><span class="example-text">\${esc(ex)}</span><button class="ex-audio-btn" id="\${eid}">\${iPlaySm()}</button></div>\`;
+      famEl.appendChild(card);
+      card.querySelector('#'+wid).addEventListener('click',function(){speak(coreEn,this)});
+      card.querySelector('#'+eid).addEventListener('click',function(){speakEx(ex,this)});
+    });
+  });
+}
+buildNav();buildLessons();
+<\/script>
+</body>
+</html>`;
+}
+</script>
+</body>
+</html>
