@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>單字學習</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --primary: #3182ce;
+    --primary-light: #ebf8ff;
+    --primary-border: #bee3f8;
+    --green: #48bb78;
+    --bg: #f0f4f8;
+    --card-bg: #fff;
+    --text: #2d3748;
+    --muted: #718096;
+    --border: #e2e8f0;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'PingFang TC','Microsoft JhengHei',sans-serif; background:var(--bg); color:var(--text); }
+
+  header {
+    background:white; text-align:center; padding:24px 20px 18px;
+    box-shadow:0 2px 10px rgba(0,0,0,.06); border-bottom:3px solid var(--primary);
+  }
+  header h1 { font-size:22px; font-weight:700; color:#1a365d; }
+  header p  { font-size:13px; color:var(--muted); margin-top:5px; }
+
+  .controls {
+    max-width:900px; margin:20px auto 0; padding:0 20px;
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+  }
+  .search-box {
+    flex:1; min-width:180px; padding:9px 14px; border:2px solid var(--border);
+    border-radius:8px; font-size:14px; font-family:inherit;
+    transition:.2s; outline:none;
+  }
+  .search-box:focus { border-color:var(--primary); }
+  .count { font-size:13px; color:var(--muted); white-space:nowrap; }
+
+  #loading {
+    text-align:center; padding:60px 20px; color:var(--muted); font-size:15px;
+  }
+  #error {
+    display:none; text-align:center; padding:40px 20px;
+    color:#e53e3e; font-size:14px; line-height:1.7;
+  }
+
+  .grid {
+    max-width:900px; margin:20px auto 60px; padding:0 20px;
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px;
+  }
+
+  .card {
+    background:var(--card-bg); border-radius:12px; padding:18px 20px;
+    box-shadow:0 2px 8px rgba(0,0,0,.07); border:1px solid var(--border);
+    transition:box-shadow .2s;
+  }
+  .card:hover { box-shadow:0 4px 16px rgba(0,0,0,.11); }
+
+  .card-top { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px; }
+  .word-wrap { flex:1; }
+  .word { font-size:20px; font-weight:800; color:#1a365d; line-height:1.2; }
+  .pos  {
+    display:inline-block; font-size:11px; background:var(--primary); color:white;
+    padding:2px 7px; border-radius:3px; margin-top:5px; font-weight:600;
+  }
+  .trans { font-size:15px; color:#4a5568; font-weight:600; margin-top:6px; }
+
+  .play-btn {
+    background:var(--green); color:white; border:none; padding:6px 11px;
+    border-radius:6px; cursor:pointer; font-size:12px; font-weight:600;
+    font-family:inherit; transition:all .15s; flex-shrink:0; white-space:nowrap;
+  }
+  .play-btn:hover { filter:brightness(.9); transform:scale(1.04); }
+  .play-btn.playing { background:#e53e3e; }
+
+  .ex {
+    margin-top:10px; padding-top:10px; border-top:1px dashed var(--border);
+    display:flex; justify-content:space-between; align-items:flex-start; gap:10px;
+  }
+  .ex-text { font-size:13px; color:var(--text); font-style:italic; line-height:1.6; flex:1; }
+  .ex-btn  { font-size:11px; padding:4px 8px; }
+
+  .no-result { text-align:center; color:var(--muted); padding:60px 20px; font-size:15px; }
+
+  /* 更新說明 */
+  .update-hint {
+    max-width:900px; margin:16px auto 0; padding:0 20px;
+    font-size:12px; color:var(--muted); line-height:1.7;
+  }
+  .update-hint code {
+    background:#edf2f7; padding:1px 5px; border-radius:3px;
+    font-family:monospace; font-size:11px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📝 單字學習</h1>
+  <p id="subtitle">載入中…</p>
+</header>
+
+<div class="controls" id="controls" style="display:none">
+  <input class="search-box" id="search" type="text" placeholder="搜尋單字、翻譯、例句…">
+  <span class="count" id="count"></span>
+</div>
+
+<p class="update-hint" id="hint" style="display:none">
+  📌 更新方式：把新版 <code>不會的單字.xlsx</code> 上傳到 GitHub repo 同一個資料夾，網頁下次載入就會自動抓新資料。
+</p>
+
+<div id="loading">⏳ 正在載入單字資料…</div>
+<div id="error"></div>
+<div class="grid" id="grid"></div>
+
+<script>
+// ── 設定：xlsx 的 GitHub raw 網址 ──────────────────────────────────
+// 請把下面這行換成你自己的 repo 路徑
+// 格式：https://raw.githubusercontent.com/使用者名/repo名/main/檔名.xlsx
+const XLSX_URL = 'https://raw.github.com/Juliauch/toeic600/unknown_words/unknown_words.xlsx';
+// ─────────────────────────────────────────────────────────────────────
+
+let allWords = [];
+let curU = null, curB = null;
+let ttsReady = false;
+
+// ── TTS ──
+function ensureVoices() {
+  return new Promise(resolve => {
+    const v = window.speechSynthesis.getVoices();
+    if (v.length) { resolve(v); return; }
+    window.speechSynthesis.addEventListener('voiceschanged', () => resolve(window.speechSynthesis.getVoices()), { once:true });
+  });
+}
+window.addEventListener('load', () => ensureVoices().then(() => ttsReady = true));
+
+function speak(text, btn) {
+  if (curU) {
+    window.speechSynthesis.cancel();
+    if (curB) { curB.classList.remove('playing'); curB.textContent = curB._orig; }
+    if (curB === btn) { curU = null; curB = null; return; }
+  }
+  const go = () => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US'; u.rate = 0.88;
+    const voices = window.speechSynthesis.getVoices();
+    const v = voices.find(v => v.lang.startsWith('en') && v.localService) || voices.find(v => v.lang.startsWith('en'));
+    if (v) u.voice = v;
+    btn._orig = btn.textContent;
+    u.onstart  = () => { btn.classList.add('playing'); btn.textContent = '⏹ 停止'; };
+    u.onend = u.onerror = () => { btn.classList.remove('playing'); btn.textContent = btn._orig; curU = null; curB = null; };
+    curU = u; curB = btn;
+    window.speechSynthesis.speak(u);
+  };
+  ttsReady ? go() : ensureVoices().then(() => { ttsReady = true; go(); });
+}
+
+// ── 載入 xlsx ──
+async function loadXlsx() {
+  const res = await fetch(XLSX_URL + '?t=' + Date.now()); // 防快取
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const buf = await res.arrayBuffer();
+  const wb  = XLSX.read(buf, { type:'array' });
+  const ws  = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+  // 跳過第一列 header
+  return rows.slice(1)
+    .filter(r => r[0] || r[2])  // 至少有單字或翻譯
+    .map(r => ({
+      word:  String(r[0] || '').trim(),
+      pos:   String(r[1] || '').trim(),
+      trans: String(r[2] || '').trim(),
+      ex:    String(r[3] || '').trim(),
+    }));
+}
+
+// ── 建卡片 ──
+function makeCard(item) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="card-top">
+      <div class="word-wrap">
+        <div class="word">${esc(item.word)}</div>
+        ${item.pos ? `<span class="pos">${esc(item.pos)}</span>` : ''}
+        <div class="trans">${esc(item.trans)}</div>
+      </div>
+      ${item.word ? `<button class="play-btn" data-text="${esc(item.word)}">🔊 唸單字</button>` : ''}
+    </div>
+    ${item.ex ? `
+    <div class="ex">
+      <span class="ex-text">${esc(item.ex)}</span>
+      <button class="play-btn ex-btn" data-text="${esc(item.ex)}">🔊 例句</button>
+    </div>` : ''}
+  `;
+  return card;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── 渲染 ──
+function render(words) {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  if (!words.length) {
+    grid.innerHTML = '<p class="no-result">找不到符合的單字 🔍</p>';
+    return;
+  }
+  words.forEach(w => grid.appendChild(makeCard(w)));
+  document.getElementById('count').textContent = `共 ${words.length} 筆`;
+}
+
+// ── 搜尋 ──
+function filter(q) {
+  if (!q) return allWords;
+  q = q.toLowerCase();
+  return allWords.filter(w =>
+    w.word.toLowerCase().includes(q) ||
+    w.trans.includes(q) ||
+    w.ex.toLowerCase().includes(q)
+  );
+}
+
+// ── TTS 事件代理 ──
+document.getElementById('grid').addEventListener('click', e => {
+  const btn = e.target.closest('.play-btn');
+  if (!btn || !btn.dataset.text) return;
+  const tmp = document.createElement('textarea');
+  tmp.innerHTML = btn.dataset.text;
+  speak(tmp.value, btn);
+});
+
+// ── 主流程 ──
+(async () => {
+  try {
+    allWords = await loadXlsx();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('controls').style.display = 'flex';
+    document.getElementById('hint').style.display = 'block';
+    document.getElementById('subtitle').textContent = `${allWords.length} 個單字 · 點播放鍵聽發音`;
+    render(allWords);
+
+    document.getElementById('search').addEventListener('input', e => {
+      render(filter(e.target.value.trim()));
+    });
+  } catch(err) {
+    document.getElementById('loading').style.display = 'none';
+    const errDiv = document.getElementById('error');
+    errDiv.style.display = 'block';
+    errDiv.innerHTML = `
+      ⚠️ 無法載入單字檔案<br><br>
+      <small>請確認 xlsx 已上傳到正確的 GitHub 路徑，且 repo 為 Public。<br>錯誤：${err.message}</small>
+    `;
+  }
+})();
+</script>
+</body>
+</html>
